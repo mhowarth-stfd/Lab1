@@ -9,6 +9,7 @@ editor_options:
 
 ```{r libraries, include = F}
 library(tidyverse)
+knitr::opts_chunk$set(warning = F, message = F)
 #library(plotly)
 #library(sf)
 #library(tigris)
@@ -20,59 +21,103 @@ library(tidyverse)
 ```
 
 
-```{r data}
+```{r data} 
+#results='hide'
 # reading in saved csv files for gas and electric from 2017 - now
 
 years <- 2017:2021
 quarters <- 1:4
 types <- c("Electric", "Gas")
 
-pge_elec <- NULL
+pge_elec_gas <- NULL
 
-for (year in years) {
-  for (quarter in quarters) {
-    filename <- 
-      paste0("pge/PGE_",year,"_Q",quarter, "_", type, "UsageByZip.csv")
-    
-    print(filename)
-    
-    temp <- read_csv(filename)
-    
-    
-    
-    pge_elec<- rbind(pge_elec,temp)
-    
-    saveRDS(pge_elec, "pge_elec_gas.rds")
-    
+for (type in types){
+  for (year in years) {
+    for (quarter in quarters) {
+      filename <- 
+        paste0("pge/PGE_",year,"_Q",quarter, "_", type, "UsageByZip.csv")
+      
+      print(filename)
+      
+      temp <- read_csv(filename)
+      
+      if (type == "Electric"){
+        temp$TOTALKWH = temp$TOTALKWH * 3412.14 / 1000  # Convert to kBTU
+        names(temp)[names(temp) == 'TOTALKWH'] <- 'TOTALKBTU'
+        
+        temp$AVERAGEKWH = temp$AVERAGEKWH * 3412.14 / 1000  # Convert to kBTU
+        names(temp)[names(temp) == 'AVERAGEKWH'] <- 'AVERAGEKBTU'
+      } else{
+        temp$TOTALTHM = temp$TOTALTHM * 99976.1 / 1000  # Convert to kBTU
+        names(temp)[names(temp) == 'TOTALTHM'] <- 'TOTALKBTU'
+        
+        temp$AVERAGETHM = temp$AVERAGETHM * 99976.1 / 1000  # Convert to kBTU
+        names(temp)[names(temp) == 'AVERAGETHM'] <- 'AVERAGEKBTU'
+      }
+      
+      pge_elec_gas<- rbind(pge_elec_gas,temp)
+      
+      saveRDS(pge_elec_gas, "pge_elec_gas.rds")
+      
+    }
   }
 }
-
-pge_elec$TOTALKWH = pge_elec$TOTALKWH * 3412.14  # Convert to BTU
-names(pge_elec)[names(pge_elec) == 'TOTALKWH'] <- 'TOTALBKU'
-pge_elec$TOTALKWH = pge_elec$AVERAGEKWH * 3412.14  # Convert to BTU
-
-type <- "Gas"
-pge_gas <- NULL
-
-for (year in years) {
-  for (quarter in quarters) {
-    filename <- 
-      paste0("pge/PGE_",year,"_Q",quarter, "_", type, "UsageByZip.csv")
-    
-    print(filename)
-    
-    temp <- read_csv(filename)
-    
-    pge_gas <- rbind(pge_gas,temp)
-    
-    saveRDS(pge_gas, "pge_gas.rds")
-    
-  }
-}
-
-
-pge_gas$TOTALTHM = pge_gas$TOTALTHM * 99976.1  # Convert to BTU
-pge_gas$TOTALTHM = pge_gas$AVERAGETHM * 99976.1  # Convert to BTU
 
 
 ```
+
+
+
+```{r ResidentialData}
+
+pge_res_filter <- filter(pge_elec_gas, 
+                  CUSTOMERCLASS %in% c("Elec- Residential","Gas- Residential"))
+
+pge_res_data <- select(pge_res_filter, 
+                          MONTH, YEAR, CUSTOMERCLASS, TOTALKBTU)
+
+pge_res_group <- group_by(pge_res_data,
+                            MONTH, YEAR, CUSTOMERCLASS)
+
+pge_res_totals <- summarize(pge_res_group, 
+                            TOTALKBTU = sum(TOTALKBTU, na.rm = T))
+
+pge_res_plot <- pge_res_totals[order(
+                                      pge_res_totals$YEAR,
+                                      pge_res_totals$MONTH),]
+
+
+
+```
+
+```{r ResidentialData}
+#sum total usage across all zips in given month, year, and type 
+pge_res_totals <- 
+  pge_elec_gas %>%
+  
+  filter(
+         CUSTOMERCLASS %in% c("Elec- Residential","Gas- Residential")
+         ) %>%
+  
+  select(
+         MONTH, YEAR, CUSTOMERCLASS, TOTALKBTU
+         ) %>%
+  
+  group_by(
+           MONTH, YEAR, CUSTOMERCLASS
+           )%>%
+  
+  summarize(
+            TOTALKBTU = sum(TOTALKBTU, na.rm = T))
+
+
+
+# Order by year then month
+
+pge_res_data <- pge_res_totals[order(
+                                      pge_res_totals$YEAR,
+                                      pge_res_totals$MONTH),]
+
+
+```
+
